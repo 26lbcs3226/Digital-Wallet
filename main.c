@@ -1,0 +1,316 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_CATEGORY 6
+
+typedef struct {
+    int id;
+    char type[20];
+    double amount;
+    char category[30];
+    char datetime[25];
+    char merchant[50];
+} Transaction;
+
+const char *categories[MAX_CATEGORY] = {
+    "Food", "Travel", "Utilities",
+    "Shopping", "Health", "Other"
+};
+
+double calculateBalance(Transaction *arr, int count) {
+    double balance = 0;
+    int i;
+
+    for (i = 0; i < count; i++) {
+        if (strcmp(arr[i].type, "Deposit") == 0)
+            balance += arr[i].amount;
+        else
+            balance -= arr[i].amount;
+    }
+
+    return balance;
+}
+
+void saveTransactions(Transaction *arr, int count) {
+    FILE *fp = fopen("wallet_transactions.txt", "w");
+    int i;
+
+    if (fp == NULL) {
+        printf("Unable to save transaction file.\n");
+        return;
+    }
+
+    fprintf(fp, "ID,Type,Amount,Category,DateTime,Merchant\n");
+
+    for (i = 0; i < count; i++) {
+        fprintf(fp, "%d,%s,%.2f,%s,%s,%s\n",
+                arr[i].id, arr[i].type, arr[i].amount,
+                arr[i].category, arr[i].datetime,
+                arr[i].merchant);
+    }
+
+    fclose(fp);
+    printf("Transaction records saved to file.\n");
+}
+
+int addTransaction(Transaction **arr, int *count,
+                   double monthlyLimit) {
+    Transaction *temp;
+    Transaction t;
+    double amount, balance;
+    int typeChoice, categoryChoice, i;
+    char month[8], transactionMonth[8];
+
+    printf("\n1. Deposit\n");
+    printf("2. Withdraw\n");
+    printf("3. Payment\n");
+    printf("Select transaction type: ");
+
+    if (scanf("%d", &typeChoice) != 1) {
+        printf("Invalid input.\n");
+        return 0;
+    }
+
+    if (typeChoice < 1 || typeChoice > 3) {
+        printf("Invalid transaction type.\n");
+        return 0;
+    }
+
+    printf("Enter amount: Rs. ");
+    if (scanf("%lf", &amount) != 1 || amount <= 0) {
+        printf("Amount must be positive.\n");
+        return 0;
+    }
+
+    balance = calculateBalance(*arr, *count);
+
+    if (typeChoice != 1 && amount > balance) {
+        printf("Transaction failed: Insufficient balance.\n");
+        return 0;
+    }
+
+    if (typeChoice == 1) {
+        strcpy(t.type, "Deposit");
+        strcpy(t.category, "Income");
+    } else {
+        if (typeChoice == 2)
+            strcpy(t.type, "Withdrawal");
+        else
+            strcpy(t.type, "Payment");
+
+        printf("\nCategories:\n");
+        for (i = 0; i < MAX_CATEGORY; i++)
+            printf("%d. %s\n", i + 1, categories[i]);
+
+        printf("Select category: ");
+        if (scanf("%d", &categoryChoice) != 1 ||
+            categoryChoice < 1 ||
+            categoryChoice > MAX_CATEGORY) {
+            printf("Invalid category.\n");
+            return 0;
+        }
+
+        strcpy(t.category, categories[categoryChoice - 1]);
+    }
+
+    printf("Enter date and time (YYYY-MM-DD HH:MM): ");
+    scanf(" %24[^\n]", t.datetime);
+
+    printf("Enter merchant or description: ");
+    scanf(" %49[^\n]", t.merchant);
+
+    temp = realloc(*arr, (*count + 1) * sizeof(Transaction));
+
+    if (temp == NULL) {
+        printf("Memory allocation failed.\n");
+        return 0;
+    }
+
+    *arr = temp;
+
+    t.id = *count + 1;
+    (*arr)[*count] = t;
+    (*count)++;
+
+    balance = calculateBalance(*arr, *count);
+
+    printf("\nTransaction successful!\n");
+    printf("Transaction ID : %d\n", t.id);
+    printf("Type           : %s\n", t.type);
+    printf("Amount         : Rs. %.2f\n", t.amount);
+    printf("Balance        : Rs. %.2f\n", balance);
+
+    if (typeChoice != 1) {
+        strncpy(transactionMonth, t.datetime, 7);
+        transactionMonth[7] = '\0';
+
+        double monthlySpent = 0;
+
+        for (i = 0; i < *count; i++) {
+            if (strcmp((*arr)[i].type, "Deposit") != 0 &&
+                strncmp((*arr)[i].datetime,
+                        transactionMonth, 7) == 0) {
+                monthlySpent += (*arr)[i].amount;
+            }
+        }
+
+        strcpy(month, transactionMonth);
+
+        if (monthlySpent > monthlyLimit) {
+            printf("ALERT: Spending limit exceeded for %s!\n",
+                   month);
+            printf("Monthly spending: Rs. %.2f\n",
+                   monthlySpent);
+        }
+    }
+
+    saveTransactions(*arr, *count);
+    return 1;
+}
+
+void generateReport(Transaction *arr, int count,
+                    double monthlyLimit) {
+    int i;
+    double income = 0, expenses = 0;
+    double categoryTotal[MAX_CATEGORY] = {0};
+    char month[8];
+
+    printf("Enter month for report (YYYY-MM): ");
+    scanf(" %7s", month);
+
+    if (strlen(month) != 7 || month[4] != '-') {
+        printf("Invalid month format.\n");
+        return;
+    }
+
+    for (i = 0; i < count; i++) {
+        if (strncmp(arr[i].datetime, month, 7) != 0)
+            continue;
+
+        if (strcmp(arr[i].type, "Deposit") == 0) {
+            income += arr[i].amount;
+        } else {
+            expenses += arr[i].amount;
+
+            int j;
+            for (j = 0; j < MAX_CATEGORY; j++) {
+                if (strcmp(arr[i].category, categories[j]) == 0) {
+                    categoryTotal[j] += arr[i].amount;
+                    break;
+                }
+            }
+        }
+    }
+
+    printf("\n======= Monthly Report =======\n");
+    printf("Month           : %s\n", month);
+    printf("Total Income    : Rs. %.2f\n", income);
+    printf("Total Expenses  : Rs. %.2f\n", expenses);
+    printf("Net Change      : Rs. %.2f\n", income - expenses);
+    printf("Wallet Balance  : Rs. %.2f\n",
+           calculateBalance(arr, count));
+
+    printf("\nCategory-wise Spending:\n");
+    for (i = 0; i < MAX_CATEGORY; i++)
+        printf("%-12s : Rs. %.2f\n",
+               categories[i], categoryTotal[i]);
+
+    printf("\nMonthly Limit   : Rs. %.2f\n", monthlyLimit);
+
+    if (expenses > monthlyLimit)
+        printf("ALERT: Monthly spending limit exceeded!\n");
+    else
+        printf("Spending is within the monthly limit.\n");
+
+    printf("==============================\n");
+}
+
+int main(void) {
+    Transaction *transactions = NULL;
+    int count = 0, choice;
+    double monthlyLimit;
+
+    printf("===== Digital Wallet =====\n");
+    printf("Set monthly spending limit: Rs. ");
+
+    if (scanf("%lf", &monthlyLimit) != 1 ||
+        monthlyLimit < 0) {
+        printf("Invalid monthly limit.\n");
+        free(transactions);
+        return 1;
+    }
+
+    do {
+        printf("\n===== Wallet Menu =====\n");
+        printf("1. Add Transaction\n");
+        printf("2. Check Balance\n");
+        printf("3. Generate Monthly Report\n");
+        printf("4. View Transaction History\n");
+        printf("5. Exit\n");
+        printf("Enter choice: ");
+
+        if (scanf("%d", &choice) != 1) {
+            printf("Invalid menu input.\n");
+            break;
+        }
+
+        switch (choice) {
+            case 1:
+                addTransaction(&transactions, &count,
+                               monthlyLimit);
+                break;
+
+            case 2:
+                printf("Current Balance: Rs. %.2f\n",
+                       calculateBalance(transactions, count));
+                break;
+
+            case 3:
+                generateReport(transactions, count,
+                               monthlyLimit);
+                break;
+
+            case 4: {
+                int i;
+
+                if (count == 0) {
+                    printf("No transactions available.\n");
+                    break;
+                }
+
+                printf("\n======= Transaction History =======\n");
+
+                for (i = 0; i < count; i++) {
+                    printf("\nID: %d | %s | Rs. %.2f\n",
+                           transactions[i].id,
+                           transactions[i].type,
+                           transactions[i].amount);
+                    printf("Category: %s\n",
+                           transactions[i].category);
+                    printf("Date/Time: %s\n",
+                           transactions[i].datetime);
+                    printf("Merchant: %s\n",
+                           transactions[i].merchant);
+                }
+                break;
+            }
+
+            case 5:
+                saveTransactions(transactions, count);
+                printf("Thank you for using Digital Wallet!\n");
+                break;
+
+            default:
+                printf("Invalid choice. Try again.\n");
+        }
+
+    } while (choice != 5);
+
+    free(transactions);
+    transactions = NULL;
+
+    return 0;
+}
+
